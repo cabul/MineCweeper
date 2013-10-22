@@ -4,7 +4,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-void setupGame(SDL_Renderer *ren, SDL_Texture *text, Cell cells[]) {
+void setupGame(SDL_Renderer *ren, SDL_Texture *text, Cell cells[], int x, int y) {
 	SDL_RenderClear(ren);
 	
 	for(int i = 0; i < XSIZE; i++) {
@@ -17,7 +17,7 @@ void setupGame(SDL_Renderer *ren, SDL_Texture *text, Cell cells[]) {
 		}
 	}
 
-	setBombs(cells,BOMB_MAX);
+	setBombs(cells,BOMB_MAX,x,y);
 
 	SDL_RenderPresent(ren);
 
@@ -32,10 +32,10 @@ void render(SDL_Renderer* ren, SDL_Texture* text, int offset, int x, int y) {
 	SDL_Rect srcR;
 	SDL_Rect destR;
 
-	srcR.x = offset*QUAD;
+	srcR.x = offset*QORG;
 	srcR.y = 0;
-	srcR.w = QUAD;
-	srcR.h = QUAD;
+	srcR.w = QORG;
+	srcR.h = QORG;
 
 	destR.x = x*QUAD;
 	destR.y = y*QUAD;
@@ -69,12 +69,10 @@ bool mark(Cell *cell, int *marked, int *disc) {
 			if(cell->bomb) {
 				*disc+=1;
 			}
-			printf("%d - %d\n", *disc,*marked);
 			return true;
 			break;
 		}
 	}
-	printf("%d - %d\n", *disc,*marked);
 	return false;
 }
 
@@ -131,15 +129,17 @@ void addAdj(Cell cells[], int x, int y) {
 	}
 }
 
-void setBombs(Cell cells[], int bombs) {
+void setBombs(Cell cells[], int bombs,int x, int y) {
 	for(int i=0; i < bombs; i++) {
-		int x = coin(0,XSIZE);
-		int y = coin(0,YSIZE);
-		if(cells[x+y*XSIZE].bomb) {
+		int x0 = coin(0,XSIZE);
+		int y0 = coin(0,YSIZE);
+		if(cells[x0+y0*XSIZE].bomb) {
 			i--;
 		} else {
-			cells[x+y*XSIZE].bomb = true;
-			addAdj(cells,x,y);
+			if(x != x0 || y != y0) {
+				cells[x0+y0*XSIZE].bomb = true;
+				addAdj(cells,x0,y0);
+			}
 		} 
 	}
 }
@@ -170,18 +170,13 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	if(TTF_Init() == -1) {
-		printf("TTF Error: %s\n", TTF_GetError());
-		return 1;
-	}
-
 	SDL_Texture *sprites;
 
 	sprites = IMG_LoadTexture(ren, "../images/bomb.png");
 
 	Cell cells[CELLS_NUM];
 
-	setupGame(ren,sprites,cells);
+	setupGame(ren,sprites,cells,0,0);
 
 	SDL_Event event;
 	bool running = true;
@@ -191,6 +186,8 @@ int main(int argc, char** argv)
 	int undisc = CELLS_NUM;
 	int marked = 0;
 	int disc = 0;
+
+	bool init = false;
 
 	while(running) {
 		if(SDL_PollEvent(&event)) {
@@ -209,7 +206,7 @@ int main(int argc, char** argv)
 							break;
 						}
 						case SDLK_n: {
-							setupGame(ren,sprites,cells);
+							setupGame(ren,sprites,cells,0,0);
 							undisc = CELLS_NUM;
 						}
 
@@ -221,26 +218,43 @@ int main(int argc, char** argv)
 					SDL_MouseButtonEvent button = event.button;
 					int x = button.x/QUAD;
 					int y = button.y/QUAD;
+					if(!init) {
+						setupGame(ren,sprites,cells,x,y);
+						undisc = CELLS_NUM;
+						marked = 0;
+						disc = 0;
+						init = true;
+					}
 					if(button.button == SDL_BUTTON_LEFT){
 						lost = !click(cells,x,y);
 						if(lost) {
 							printf("%s\n", "Game Over!");
+							for(int i=0;i<XSIZE;i++) {
+								for(int j=0;j<YSIZE;j++) {
+									Cell *cell = &cells[i+j*XSIZE];
+									if(cell->bomb) {
+										cell->img = BOMB;
+									}
+								}
+							}
 							renderAll(ren,sprites,cells);
-							SDL_Delay(2000);
-							setupGame(ren,sprites,cells);
+							SDL_Delay(4000);
+							setupGame(ren,sprites,cells,0,0);
 							undisc = CELLS_NUM;
 							marked = 0;
 							disc = 0;
+							init = false;
 						} else {
 							undisc -= checkCell(cells,x,y);
 							if(undisc == BOMB_MAX) {
 								printf("%s\n", "You won!");
 								renderAll(ren,sprites,cells);
 								SDL_Delay(2000);
-								setupGame(ren,sprites,cells);
+								setupGame(ren,sprites,cells,0,0);
 								undisc = CELLS_NUM;
 								marked = 0;
 								disc = 0;
+								init = false;
 							}
 						} 
 					} else if(button.button == SDL_BUTTON_RIGHT) {
@@ -250,14 +264,15 @@ int main(int argc, char** argv)
 								printf("%s\n", "You won!");
 								renderAll(ren,sprites,cells);
 								SDL_Delay(2000);
-								setupGame(ren,sprites,cells);
+								setupGame(ren,sprites,cells,0,0);
 								undisc = CELLS_NUM;
 								marked = 0;
 								disc = 0;	
+								init = false;
 							}
 						}
 					}
-					renderAll(ren,sprites,cells);
+				renderAll(ren,sprites,cells);
 				}
 			}
 		}
@@ -266,8 +281,6 @@ int main(int argc, char** argv)
 	SDL_DestroyRenderer(ren);
 	SDL_DestroyWindow(win);
 
-
-	TTF_Quit();
 	SDL_Quit();
 
 	return 0;
